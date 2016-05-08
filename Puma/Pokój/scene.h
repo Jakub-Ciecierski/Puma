@@ -10,7 +10,31 @@
 #include "particles.h"
 #include "camera_fps.h"
 
+#include "common.h"
+#include "Mtxlib.h"
+
 using namespace gk2;
+
+struct Edge {
+	int vertexIdx1;
+	int vertexIdx2;
+	int triangleIdx1;
+	int triangleIdx2;
+};
+
+struct Triangle {
+	int vertexIdx1;
+	int vertexIdx2;
+	int vertexIdx3;
+};
+
+struct VertexPosNormal
+{
+	DirectX::XMFLOAT3 Pos;
+	DirectX::XMFLOAT3 Normal;
+	static const unsigned int LayoutElements = 2;
+	static const D3D11_INPUT_ELEMENT_DESC Layout[LayoutElements];
+};
 
 class Scene : public ApplicationBase
 {
@@ -29,6 +53,9 @@ protected:
 	void Render() override;
 
 private:
+	//Various D3D constants
+	static const unsigned int VB_STRIDE;
+	static const unsigned int VB_OFFSET;
 	static const unsigned int BS_MASK;
 
 	Mesh floor;
@@ -67,6 +94,18 @@ private:
 	//Rasterizer state used to define front faces as counter-clockwise, used when drawing mirrored scene
 	std::shared_ptr<ID3D11RasterizerState> m_rsCounterClockwise;
 
+
+	std::vector<DirectX::XMFLOAT3> m_meshVertexPos[6];
+	std::vector<Triangle> m_meshTriangles[6];
+	std::vector<Edge> m_meshEdges[6];
+	DirectX::XMMATRIX m_meshMtx[6];
+	std::shared_ptr<ID3D11Buffer> m_vbMesh[6];
+	std::shared_ptr<ID3D11Buffer> m_ibMesh[6];
+
+	void LoadMeshPart(std::string filename, int partIdx);
+	void InitializeMesh();
+	void inverse_kinematics(vector3 pos, vector3 normal, float &a1, float &a2, float &a3, float &a4, float &a5);
+
 	void InitializeConstantBuffers();
 	void InitializeCamera();
 	void InitializeRenderStates();
@@ -75,9 +114,11 @@ private:
 	void UpdateCamera() const;
 	void UpdateCamera(const DirectX::XMMATRIX& view) const;
 	void UpdateCameraControl();
+	void UpdateRobot(float dt);
 
 	void DrawScene(bool mirrored = false);
 	void DrawRoom();
+	void DrawMesh() const;
 
 	void DrawMirroredScene();
 };

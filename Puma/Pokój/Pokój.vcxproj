@@ -138,12 +138,14 @@
     <ClCompile Include="gk2_vertices.cpp" />
     <ClCompile Include="gk2_window.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Mtxlib.cpp" />
     <ClCompile Include="particles.cpp" />
     <ClCompile Include="scene.cpp" />
     <ClCompile Include="WICTextureLoader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="camera_fps.h" />
+    <ClInclude Include="common.h" />
     <ClInclude Include="gk2_applicationBase.h" />
     <ClInclude Include="gk2_camera.h" />
     <ClInclude Include="gk2_constantBuffer.h" />
@@ -161,6 +163,7 @@
     <ClInclude Include="gk2_utils.h" />
     <ClInclude Include="gk2_vertices.h" />
     <ClInclude Include="gk2_window.h" />
+    <ClInclude Include="Mtxlib.h" />
     <ClInclude Include="particles.h" />
     <ClInclude Include="scene.h" />
     <ClInclude Include="WICTextureLoader.h" />

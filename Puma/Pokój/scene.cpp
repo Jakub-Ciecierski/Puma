@@ -1,13 +1,19 @@
+#define _CRT_SECURE_NO_DEPRECATE
 #include "scene.h"
 
 #include "gk2_window.h"
 #include "gk2_utils.h"
 #include <array>
 
+#include "common.h"
+#include "Mtxlib.h"
+
 using namespace std;
 using namespace gk2;
 using namespace DirectX;
 
+const unsigned int Scene::VB_STRIDE = sizeof(VertexPosNormal);
+const unsigned int Scene::VB_OFFSET = 0;
 const unsigned int Scene::BS_MASK = 0xffffffff;
 
 float BACKGROUND_COLOR_BUFF[4] = { 0.7f, 0.7f, 0.7f, 1.0f };
@@ -52,6 +58,69 @@ void Scene::InitializeCamera()
 	m_projCB->Update(m_context, m_projMtx);
 	m_camera.Zoom(5);
 	UpdateCamera();
+}
+
+void Scene::LoadMeshPart(string filename, int partIdx)
+{
+	int count;
+	vector<VertexPosNormal> vertices;
+	vector<unsigned short> indices;
+
+	FILE *file = fopen(filename.c_str(), "r");
+
+	// Load vertex positions
+	fscanf(file, "%d", &count);
+	for (int i = 0; i < count; ++i) {
+		float x, y, z;
+		fscanf(file, "%f %f %f", &x, &y, &z);
+		m_meshVertexPos[partIdx].push_back(XMFLOAT3(x, y, z));
+	}
+
+	// Load vertices
+	fscanf(file, "%d", &count);
+	for (int i = 0; i < count; ++i) {
+		int idx;
+		float x, y, z;
+		fscanf(file, "%d %f %f %f", &idx, &x, &y, &z);
+		VertexPosNormal vertex;
+		vertex.Pos = XMFLOAT3(m_meshVertexPos[partIdx][idx].x, m_meshVertexPos[partIdx][idx].y, m_meshVertexPos[partIdx][idx].z);
+		vertex.Normal = XMFLOAT3(x, y, z);
+		vertices.push_back(vertex);
+	}
+
+	// Load triangles
+	fscanf(file, "%d", &count);
+	for (int i = 0; i < count; ++i) {
+		int a, b, c;
+		fscanf(file, "%d %d %d", &a, &b, &c);
+		indices.push_back(a);
+		indices.push_back(b);
+		indices.push_back(c);
+		m_meshTriangles[partIdx].push_back({ a, b, c });
+	}
+
+	// Load edges
+	fscanf(file, "%d", &count);
+	for (int i = 0; i < count; ++i) {
+		int a, b, c, d;
+		fscanf(file, "%d %d %d %d", &a, &b, &c, &d);
+		m_meshEdges[partIdx].push_back({ a, b, c, d });
+	}
+
+	fclose(file);
+
+	m_vbMesh[partIdx] = m_device.CreateVertexBuffer(vertices);
+	m_ibMesh[partIdx] = m_device.CreateIndexBuffer(reinterpret_cast<const unsigned short*>(indices.data()), sizeof(unsigned short) * indices.size());
+}
+
+void Scene::InitializeMesh()
+{
+	LoadMeshPart("assets/mesh1.txt", 0);
+	LoadMeshPart("assets/mesh2.txt", 1);
+	LoadMeshPart("assets/mesh3.txt", 2);
+	LoadMeshPart("assets/mesh4.txt", 3);
+	LoadMeshPart("assets/mesh5.txt", 4);
+	LoadMeshPart("assets/mesh6.txt", 5);
 }
 
 void Scene::CreateScene()
@@ -101,14 +170,14 @@ void Scene::CreateRoom() {
 	floor.setWorldMatrix(
 		XMMatrixScaling(10.0f, 10.0f, 10.0f)
 		* XMMatrixRotationX(XM_PIDIV2)
-		* XMMatrixTranslation(0.0f, 0.0f, 0.0f));
+		* XMMatrixTranslation(0.0f, -1.0f, 0.0f));
 	floor.setColor(wallColor);
 	
 	ceiling = loader.GetQuad();
 	ceiling.setWorldMatrix(
 		XMMatrixScaling(10.0f, 10.0f, 10.0f)
 		* XMMatrixRotationX(1.5*XM_PI)
-		* XMMatrixTranslation(0.0f, 10.0f, 0.0f));
+		* XMMatrixTranslation(0.0f, 9.0f, 0.0f));
 	ceiling.setColor(wallColor);
 
 	auto angle = 0;
@@ -116,7 +185,7 @@ void Scene::CreateRoom() {
 	walls[0].setWorldMatrix(
 		XMMatrixScaling(10.0f, 10.0f, 10.0f)
 		* XMMatrixRotationY(angle)
-		* XMMatrixTranslation(0.0f, a/2, a/2));
+		* XMMatrixTranslation(0.0f, a/2 - 1.0f, a/2));
 	walls[0].setColor(wallColor);
 
 
@@ -124,21 +193,21 @@ void Scene::CreateRoom() {
 	walls[1].setWorldMatrix(
 		XMMatrixScaling(10.0f, 10.0f, 10.0f)
 		* XMMatrixRotationY(XM_PI)
-		* XMMatrixTranslation(0.0f, a/2, -a/2));
+		* XMMatrixTranslation(0.0f, a/2 - 1.0f, -a/2));
 	walls[1].setColor(wallColor);
 
 	walls[2] = loader.GetQuad();
 	walls[2].setWorldMatrix(
 		XMMatrixScaling(10.0f, 10.0f, 10.0f)
 		* XMMatrixRotationY(XM_PIDIV2)
-		* XMMatrixTranslation(a/2, a / 2, 0));
+		* XMMatrixTranslation(a/2, a / 2 - 1.0f, 0));
 	walls[2].setColor(wallColor);
 
 	walls[3] = loader.GetQuad();
 	walls[3].setWorldMatrix(
 		XMMatrixScaling(10.0f, 10.0f, 10.0f)
 		* XMMatrixRotationY(-XM_PIDIV2)
-		* XMMatrixTranslation(-a / 2, a / 2, 0));
+		* XMMatrixTranslation(-a / 2, a / 2 - 1.0f, 0));
 	walls[3].setColor(wallColor);
 }
 
@@ -207,6 +276,7 @@ bool Scene::LoadContent()
 	InitializeConstantBuffers();
 	InitializeCamera();
 	InitializeRenderStates();
+	InitializeMesh();
 	CreateScene();
 	m_phongEffect = make_shared<PhongEffect>(m_device, m_layout);
 	m_phongEffect->SetProjMtxBuffer(m_projCB);
@@ -230,7 +300,10 @@ bool Scene::LoadContent()
 
 void Scene::UnloadContent()
 {
-
+	for (int i = 0; i < 6; ++i) {
+		m_vbMesh[i].reset();
+		m_ibMesh[i].reset();
+	}
 }
 
 void Scene::UpdateCameraControl() {
@@ -238,7 +311,7 @@ void Scene::UpdateCameraControl() {
 	MouseState currentState;
 	KeyboardState keyboardState;
 
-	float mouseBoost = 1.0f;
+	float mouseBoost = 300.0f;
 
 	if (m_keyboard->GetState(keyboardState)) {
 		float boost = 1.0f;
@@ -295,10 +368,52 @@ void Scene::UpdateCamera(const XMMATRIX& view) const
 	m_cameraPosCB->Update(m_context, m_camera.GetPosition());
 }
 
+void Scene::inverse_kinematics(vector3 pos, vector3 normal, float &a1, float &a2, float &a3, float &a4, float &a5)
+{
+	float l1 = .91f, l2 = .81f, l3 = .33f, dy = .27f, dz = .26f;
+	normal.normalize();
+	vector3 pos1 = pos + normal * l3;
+	float e = sqrtf(pos1.z*pos1.z + pos1.x*pos1.x - dz*dz);
+	a1 = atan2(pos1.z, -pos1.x) + atan2(dz, e);
+	vector3 pos2(e, pos1.y - dy, .0f);
+	a3 = -acosf(min(1.0f, (pos2.x*pos2.x + pos2.y*pos2.y - l1*l1 - l2*l2) / (2.0f*l1*l2)));
+	float k = l1 + l2 * cosf(a3), l = l2 * sinf(a3);
+	a2 = -atan2(pos2.y, sqrtf(pos2.x*pos2.x + pos2.z*pos2.z)) - atan2(l, k);
+	vector4 tmp1(RotateRadMatrix44('y', -a1) * vector4(normal.x, normal.y, normal.z, .0f));
+	vector4 tmp2(RotateRadMatrix44('z', -(a2 + a3)) * vector4(tmp1.x, tmp1.y, tmp1.z, .0f));
+	vector3 normal1;
+	normal1 = vector3(tmp2.x, tmp2.y, tmp2.z);
+	a5 = acosf(normal1.x);
+	a4 = atan2(normal1.z, normal1.y);
+}
+
+void Scene::UpdateRobot(float dtime)
+//Update robot parts matrices using inverse kinematics
+{
+	static float t = 0;
+	t += dtime;
+	float a1 = XM_PIDIV2 * t;
+	float a2 = XM_PIDIV2 / 2 * t;
+	float a3 = XM_PIDIV2 / 2 * t;
+	float a4 = XM_PIDIV2 / 2 * t;
+	float a5 = XM_PIDIV2 / 2 * t;
+
+	vector4 pos = TranslateMatrix44(-1.5, 0.25, 0) * RotateRadMatrix44(vector3(1, 1, 0), t) * vector4(0, 0, 0.5, 1);
+	inverse_kinematics(vector3(pos.x, pos.y, pos.z), vector3(1, 1, 0), a1, a2, a3, a4, a5);
+
+	m_meshMtx[0] = XMMatrixIdentity();
+	m_meshMtx[1] = XMMatrixRotationY(a1) * m_meshMtx[0];
+	m_meshMtx[2] = XMMatrixTranslation(0, -0.27, 0) * XMMatrixRotationZ(a2) * XMMatrixTranslation(0, 0.27, 0) * m_meshMtx[1];
+	m_meshMtx[3] = XMMatrixTranslation(0.91f, -0.27f, 0.26f) * XMMatrixRotationZ(a3) * XMMatrixTranslation(-0.91f, 0.27f, -0.26f) * m_meshMtx[2];
+	m_meshMtx[4] = XMMatrixTranslation(0, -0.27, 0.26f) * XMMatrixRotationX(a4) * XMMatrixTranslation(0, 0.27, -0.26f) * m_meshMtx[3];
+	m_meshMtx[5] = XMMatrixTranslation(1.72f, -0.27f, 0) * XMMatrixRotationZ(a5) * XMMatrixTranslation(-1.72f, 0.27f, 0) * m_meshMtx[4];
+}
+
 void Scene::Update(float dt)
 {
 	cameraFPS.update();
 	UpdateCameraControl();
+	UpdateRobot(dt);
 	
 	m_particles->Update(m_context, dt, m_camera.GetPosition());
 }
@@ -326,6 +441,19 @@ void Scene::DrawScene(bool mirrored)
 	lightSource.Render(m_context);
 
 	DrawRoom();
+}
+
+void Scene::DrawMesh() const
+{
+	for (int i = 0; i < 6; ++i) {
+		m_worldCB->Update(m_context, m_meshMtx[i]);
+		// m_context->UpdateSubresource(m_cbWorld.get(), 0, nullptr, &m_meshMtx[i], 0, 0);
+
+		auto b = m_vbMesh[i].get();
+		m_context->IASetVertexBuffers(0, 1, &b, &VB_STRIDE, &VB_OFFSET);
+		m_context->IASetIndexBuffer(m_ibMesh[i].get(), DXGI_FORMAT_R16_UINT, 0);
+		m_context->DrawIndexed(m_meshTriangles[i].size() * 3, 0, 0);
+	}
 }
 
 void Scene::DrawRoom() {
@@ -386,6 +514,7 @@ void Scene::Render()
 	
 	DrawMirroredScene();
 	DrawScene(false);
+	DrawMesh();
 
 	//TODO: Replace with light and shadow map effect. DONE
 	//m_lightShadowEffect->Begin(m_context);

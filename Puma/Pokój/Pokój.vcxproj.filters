@@ -108,6 +108,9 @@
     <ClCompile Include="particles.cpp">
       <Filter>Source Files\framework\puma</Filter>
     </ClCompile>
+    <ClCompile Include="Mtxlib.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="gk2_particles.h">
@@ -172,6 +175,12 @@
     </ClInclude>
     <ClInclude Include="particles.h">
       <Filter>Header Files\puma</Filter>
+    </ClInclude>
+    <ClInclude Include="common.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Mtxlib.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
