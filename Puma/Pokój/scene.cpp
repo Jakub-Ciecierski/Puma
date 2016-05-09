@@ -161,7 +161,8 @@ void Scene::CreateScene()
 		* XMMatrixTranslation(-1.5f, 0.25f, 0.0f);
 
 	plate.setWorldMatrix(plateWorldMatrix);
-	plate.setColor(XMFLOAT4(0.5, 0.3, 0.3, 0.7));
+	plate.setColor(XMFLOAT4(0.2, 0.1, 0.0, 0.7));
+	
 	XMVECTOR det;
 	m_mirrorMtx = 
 		XMMatrixInverse(&det, plateWorldMatrix)
@@ -170,7 +171,8 @@ void Scene::CreateScene()
 
 void Scene::CreateRoom() {
 	MeshLoader loader(m_device);
-	XMFLOAT4 wallColor(0.5, 0.5, 0.5, 1.0);
+	XMFLOAT4 wallColor(0.8, 0.8, 0.8, 1.0);
+	//XMFLOAT4 wallColor(0.32, 0.83, 1.0, 1.0);
 
 	float a = 10.0f;
 
@@ -265,6 +267,7 @@ void Scene::InitializeRenderStates()
 	bsDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
 	bsDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
 	*/
+	
 	bsDesc.RenderTarget[0].BlendEnable = true;
 	bsDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
 	bsDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
@@ -272,6 +275,7 @@ void Scene::InitializeRenderStates()
 	bsDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
 	bsDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
 	bsDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+	
 	m_bsAlpha = m_device.CreateBlendState(bsDesc);
 
 	dssDesc = m_device.DefaultDepthStencilDesc();
@@ -326,7 +330,7 @@ void Scene::UpdateCameraControl() {
 		float boost = 1.0f;
 		if (keyboardState.isKeyDown(DIK_SPACE)) {
 			boost = 3.0f;
-			mouseBoost = 3.0f;
+			//mouseBoost = 3.0f;
 		}
 		if (keyboardState.isKeyDown(DIK_W)) {
 			cameraFPS.moveForward(boost);
@@ -502,7 +506,8 @@ void Scene::DrawMirroredScene()
 	DrawScene(true);
 
 	m_phongEffect->End();
-	
+
+
 	// Particles will not render with counter-clockwise
 	m_context->RSSetState(nullptr);
 
@@ -512,7 +517,7 @@ void Scene::DrawMirroredScene()
 	m_particles->Render(m_context);
 	m_context->OMSetDepthStencilState(nullptr, 0);
 	m_context->OMSetBlendState(nullptr, nullptr, BS_MASK);
-	
+
 	// Mirror Stencil
 	m_context->OMSetDepthStencilState(nullptr, 0);
 
