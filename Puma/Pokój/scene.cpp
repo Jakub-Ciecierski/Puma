@@ -319,7 +319,8 @@ void Scene::UpdateCameraControl() {
 	MouseState currentState;
 	KeyboardState keyboardState;
 
-	float mouseBoost = 300.0f;
+	//float mouseBoost = 300.0f;
+	float mouseBoost = 1.0f;
 
 	if (m_keyboard->GetState(keyboardState)) {
 		float boost = 1.0f;
@@ -486,6 +487,8 @@ void Scene::DrawRoom() {
 
 void Scene::DrawMirroredScene()
 {
+	m_phongEffect->Begin(m_context);
+
 	m_context->OMSetDepthStencilState(m_dssWrite.get(), 1); 
 	m_worldCB->Update(m_context, plate.getWorldMatrix());
 	plate.Render(m_context);
@@ -494,24 +497,26 @@ void Scene::DrawMirroredScene()
 	//Setup render state and view matrix for rendering the mirrored world
 	DirectX::XMMATRIX ViewMirror = m_mirrorMtx * cameraFPS.getViewMatrix();
 	UpdateCamera(ViewMirror);
-
-	//Setup render state for writing to the stencil buffer
 	m_context->RSSetState(m_rsCounterClockwise.get());
 
 	DrawScene(true);
-	/*
+
+	m_phongEffect->End();
+	
+	// Particles will not render with counter-clockwise
+	m_context->RSSetState(nullptr);
+
+	// Render Particles
 	m_context->OMSetBlendState(m_bsAlpha.get(), nullptr, BS_MASK);
 	m_context->OMSetDepthStencilState(m_dssNoWrite.get(), 0);
 	m_particles->Render(m_context);
 	m_context->OMSetDepthStencilState(nullptr, 0);
 	m_context->OMSetBlendState(nullptr, nullptr, BS_MASK);
-	*/
+	
+	// Mirror Stencil
+	m_context->OMSetDepthStencilState(nullptr, 0);
 
 	UpdateCamera(cameraFPS.getViewMatrix());
-
-	//Restore rendering state to it's original values
-	m_context->RSSetState(nullptr);
-	m_context->OMSetDepthStencilState(nullptr, 0);
 }
 
 
@@ -529,23 +534,20 @@ void Scene::Render()
 	m_projCB->Update(m_context, m_projMtx);
 	UpdateCamera();
 	
-	m_phongEffect->Begin(m_context);
-	
 	DrawMirroredScene();
+
+	m_phongEffect->Begin(m_context);
 	DrawScene(false);
-	DrawMesh();
+	m_phongEffect->End();
 
-	//TODO: Replace with light and shadow map effect. DONE
-	//m_lightShadowEffect->Begin(m_context);
-	//m_lightShadowEffect->End();
-
+	// Draw Partciles
 	m_context->OMSetBlendState(m_bsAlpha.get(), nullptr, BS_MASK);
 	m_context->OMSetDepthStencilState(m_dssNoWrite.get(), 0);
 	m_particles->Render(m_context);
 	m_context->OMSetDepthStencilState(nullptr, 0);
 	m_context->OMSetBlendState(nullptr, nullptr, BS_MASK);
-
+	
 	m_swapChain->Present(0, 0);
 	
-	m_phongEffect->End();
+
 }

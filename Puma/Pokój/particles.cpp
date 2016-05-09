@@ -140,7 +140,6 @@ XMFLOAT4 operator -(const XMFLOAT4& v1, const XMFLOAT4& v2)
 
 void ParticleSystem::UpdateParticle(Particle& p, float dt)
 {
-	//const float GRAVITY_CONST = -9.81f;
 	const float GRAVITY_CONST = 9.81f;
 	XMFLOAT3 down(0, -1, 0);
 	float mass = 0.5f;
