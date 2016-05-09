@@ -14,13 +14,14 @@ namespace gk2
 	struct ParticleVertex
 	{
 		DirectX::XMFLOAT3 Pos;
+		DirectX::XMFLOAT3 PreviousPos;
 		float Age;
 		float Angle;
 		float Size;
-		static const unsigned int LayoutElements = 4;
+		static const unsigned int LayoutElements = 5;
 		static const D3D11_INPUT_ELEMENT_DESC Layout[LayoutElements];
 
-		ParticleVertex() : Pos(0.0f, 0.0f, 0.0f), Age(0.0f), Angle(0.0f), Size(0.0f) { }
+		ParticleVertex() : Pos(0.0f, 0.0f, 0.0f), PreviousPos(0.0f, 0.0f, 0.0f), Age(0.0f), Angle(0.0f), Size(0.0f) { }
 	};
 
 	struct ParticleVelocities
@@ -52,6 +53,7 @@ namespace gk2
 	{
 	public:
 		ParticleSystem(DeviceHelper& device, DirectX::XMFLOAT3 emitterPos);
+		void SetEmitterPosition(const DirectX::XMFLOAT3& pos);
 
 		void SetViewMtxBuffer(const std::shared_ptr<CBMatrix>& view);
 		void SetProjMtxBuffer(const std::shared_ptr<CBMatrix>& proj);

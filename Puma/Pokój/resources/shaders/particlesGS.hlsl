@@ -5,7 +5,8 @@
 
 struct GSInput
 {
-	float4 pos : POSITION;
+	float4 pos : POSITION0;
+	float4 prev_pos : POSITION1;
 	float age : TEXCOORD0;
 	float angle : TEXCOORD1;
 	float size : TEXCOORD2;
@@ -18,7 +19,7 @@ struct PSInput
 	float2 tex2: TEXCOORD1;
 };
 
-static const float TimeToLive = 4.0f;
+static const float TimeToLive = 0.8f;
 
 [maxvertexcount(4)]
 void main(point GSInput inArray[1], inout TriangleStream<PSInput> ostream)
@@ -26,8 +27,10 @@ void main(point GSInput inArray[1], inout TriangleStream<PSInput> ostream)
 	GSInput i = inArray[0];
 	float sina, cosa;
 	sincos(i.angle, sina, cosa);
+	
 	float dx = (cosa - sina) * 0.5 * i.size;
 	float dy = (cosa + sina) * 0.5 * i.size;
+
 	PSInput o = (PSInput)0;
 	o.tex2 = float2(i.age / TimeToLive, 0.5f);
 

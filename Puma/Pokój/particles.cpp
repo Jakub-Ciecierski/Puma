@@ -10,9 +10,10 @@ using namespace DirectX;
 const D3D11_INPUT_ELEMENT_DESC ParticleVertex::Layout[ParticleVertex::LayoutElements] =
 {
 	{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-	{ "TEXCOORD", 0, DXGI_FORMAT_R32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-	{ "TEXCOORD", 1, DXGI_FORMAT_R32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-	{ "TEXCOORD", 2, DXGI_FORMAT_R32_FLOAT, 0, 20, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+	{ "POSITION", 1, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	{ "TEXCOORD", 0, DXGI_FORMAT_R32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	{ "TEXCOORD", 1, DXGI_FORMAT_R32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	{ "TEXCOORD", 2, DXGI_FORMAT_R32_FLOAT, 0, 32, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 };
 
 bool ParticleComparer::operator()(const ParticleVertex& p1, const ParticleVertex& p2) const
@@ -29,8 +30,8 @@ bool ParticleComparer::operator()(const ParticleVertex& p1, const ParticleVertex
 }
 
 const XMFLOAT3 ParticleSystem::EMITTER_DIR = XMFLOAT3(0.0f, 1.0f, 0.0f);
-const float ParticleSystem::TIME_TO_LIVE = 4.0f;
-const float ParticleSystem::EMISSION_RATE = 10.0f;
+const float ParticleSystem::TIME_TO_LIVE = 0.8f;
+const float ParticleSystem::EMISSION_RATE = 30.0f;
 const float ParticleSystem::MAX_ANGLE = XM_PIDIV2 / 9.0f;
 const float ParticleSystem::MIN_VELOCITY = 0.2f;
 const float ParticleSystem::MAX_VELOCITY = 0.33f;
@@ -38,7 +39,7 @@ const float ParticleSystem::PARTICLE_SIZE = 0.08f;
 const float ParticleSystem::PARTICLE_SCALE = 1.0f;
 const float ParticleSystem::MIN_ANGLE_VEL = -XM_PI;
 const float ParticleSystem::MAX_ANGLE_VEL = XM_PI;
-const int ParticleSystem::MAX_PARTICLES = 500;
+const int ParticleSystem::MAX_PARTICLES = 1500;
 
 const unsigned int ParticleSystem::STRIDE = sizeof(ParticleVertex);
 const unsigned int ParticleSystem::OFFSET = 0;
@@ -63,6 +64,10 @@ ParticleSystem::ParticleSystem(DeviceHelper& device, XMFLOAT3 emitterPos)
 	m_samplerState = device.CreateSamplerState(sd);
 }
 
+void ParticleSystem::SetEmitterPosition(const XMFLOAT3& pos) {
+	this->m_emitterPos = pos;
+}
+
 void ParticleSystem::SetViewMtxBuffer(const shared_ptr<CBMatrix>& view)
 {
 	if (view != nullptr)
@@ -77,16 +82,22 @@ void ParticleSystem::SetProjMtxBuffer(const shared_ptr<CBMatrix>& proj)
 
 XMFLOAT3 ParticleSystem::RandomVelocity()
 {
-	float x, y;
+	float lenBoost = 5.0f;
+	float x, y, z;
 	do
 	{
 		x = m_dirCoordDist(m_random);
 		y = m_dirCoordDist(m_random);
-	} while (x*x + y*y > 1.0f);
+		z = m_dirCoordDist(m_random);
+	} while (x*x + y*y + z*z > 1.0f);
 	auto a = tan(MAX_ANGLE);
-	XMFLOAT3 v(x * a, 1.0f, y * a);
-	auto velocity = XMLoadFloat3(&v);
-	auto len = m_velDist(m_random);
+
+	XMFLOAT3 v((1 + x)*a, 1.0f, (0 + z)*a);
+
+	XMVECTOR velocity = XMLoadFloat3(&v);
+
+	auto len = m_velDist(m_random) + lenBoost;
+
 	velocity = len * XMVector3Normalize(velocity);
 	XMStoreFloat3(&v, velocity);
 	return v;
@@ -96,11 +107,14 @@ void ParticleSystem::AddNewParticle()
 {
 	Particle p;
 	p.Vertex.Pos = m_emitterPos;
+	p.Vertex.PreviousPos = m_emitterPos;
 	p.Vertex.Age = 0.0f;
 	p.Vertex.Angle = 0.0f;
 	p.Vertex.Size = PARTICLE_SIZE;
+
 	p.Velocities.Velocity = RandomVelocity();
 	p.Velocities.AngleVelocity = m_angleVelDist(m_random);
+
 	m_particles.push_back(p);
 }
 
@@ -126,8 +140,29 @@ XMFLOAT4 operator -(const XMFLOAT4& v1, const XMFLOAT4& v2)
 
 void ParticleSystem::UpdateParticle(Particle& p, float dt)
 {
+	//const float GRAVITY_CONST = -9.81f;
+	const float GRAVITY_CONST = 9.81f;
+	XMFLOAT3 down(0, -1, 0);
+	float mass = 0.5f;
+
+	XMFLOAT3 gravityForce = down * GRAVITY_CONST;
+	XMFLOAT3 acceleration;
+	acceleration.x = gravityForce.x / mass;
+	acceleration.y = gravityForce.y / mass;
+	acceleration.z = gravityForce.z / mass;
+
+	p.Velocities.Velocity.x += acceleration.x * dt;
+	p.Velocities.Velocity.y += acceleration.y * dt;
+	p.Velocities.Velocity.z += acceleration.z * dt;
+
+	//p.Velocities.Velocity.x += GRAVITY_CONST * dt;
+	//p.Velocities.Velocity.y += GRAVITY_CONST * dt;
+	//p.Velocities.Velocity.z += GRAVITY_CONST * dt;
+
 	p.Vertex.Age += dt;
+	p.Vertex.PreviousPos = p.Vertex.Pos;
 	p.Vertex.Pos = p.Vertex.Pos + p.Velocities.Velocity * dt;
+
 	p.Vertex.Size += PARTICLE_SCALE * PARTICLE_SIZE * dt;
 	p.Vertex.Angle += p.Velocities.AngleVelocity * dt;
 }

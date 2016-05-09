@@ -148,9 +148,17 @@ void Scene::CreateScene()
 		* XMMatrixTranslation(0.0f, 0.7f, 2.0f);
 		*/
 	// TODO, when palte is rotated, the plate color is not updated corectly
+	/*
 	XMMATRIX plateWorldMatrix =
 		XMMatrixScaling(1.5f, 2.2f, 1.0f)
 		* XMMatrixTranslation(0.0f, 1.2f, 2.0f);
+		*/
+	
+	XMMATRIX plateWorldMatrix =
+		XMMatrixScaling(1.5f, 1.5f, 1.0f)
+		* XMMatrixRotationX(XM_PIDIV4)
+		* XMMatrixRotationY(-XM_PIDIV2)
+		* XMMatrixTranslation(-1.5f, 0.25f, 0.0f);
 
 	plate.setWorldMatrix(plateWorldMatrix);
 	plate.setColor(XMFLOAT4(0.5, 0.3, 0.3, 0.7));
@@ -407,6 +415,10 @@ void Scene::UpdateRobot(float dtime)
 	m_meshMtx[3] = XMMatrixTranslation(0.91f, -0.27f, 0.26f) * XMMatrixRotationZ(a3) * XMMatrixTranslation(-0.91f, 0.27f, -0.26f) * m_meshMtx[2];
 	m_meshMtx[4] = XMMatrixTranslation(0, -0.27, 0.26f) * XMMatrixRotationX(a4) * XMMatrixTranslation(0, 0.27, -0.26f) * m_meshMtx[3];
 	m_meshMtx[5] = XMMatrixTranslation(1.72f, -0.27f, 0) * XMMatrixRotationZ(a5) * XMMatrixTranslation(-1.72f, 0.27f, 0) * m_meshMtx[4];
+
+	// Update particles
+	m_particles->SetEmitterPosition(XMFLOAT3(pos.x, pos.y, pos.z));
+	m_particles->Update(m_context, dtime, m_camera.GetPosition());
 }
 
 void Scene::Update(float dt)
@@ -414,8 +426,6 @@ void Scene::Update(float dt)
 	cameraFPS.update();
 	UpdateCameraControl();
 	UpdateRobot(dt);
-	
-	m_particles->Update(m_context, dt, m_camera.GetPosition());
 }
 
 void Scene::DrawScene(bool mirrored)
@@ -441,6 +451,7 @@ void Scene::DrawScene(bool mirrored)
 	lightSource.Render(m_context);
 
 	DrawRoom();
+	DrawMesh();
 }
 
 void Scene::DrawMesh() const
@@ -488,6 +499,14 @@ void Scene::DrawMirroredScene()
 	m_context->RSSetState(m_rsCounterClockwise.get());
 
 	DrawScene(true);
+	/*
+	m_context->OMSetBlendState(m_bsAlpha.get(), nullptr, BS_MASK);
+	m_context->OMSetDepthStencilState(m_dssNoWrite.get(), 0);
+	m_particles->Render(m_context);
+	m_context->OMSetDepthStencilState(nullptr, 0);
+	m_context->OMSetBlendState(nullptr, nullptr, BS_MASK);
+	*/
+
 	UpdateCamera(cameraFPS.getViewMatrix());
 
 	//Restore rendering state to it's original values
@@ -522,9 +541,10 @@ void Scene::Render()
 
 	m_context->OMSetBlendState(m_bsAlpha.get(), nullptr, BS_MASK);
 	m_context->OMSetDepthStencilState(m_dssNoWrite.get(), 0);
-	//m_particles->Render(m_context);
+	m_particles->Render(m_context);
 	m_context->OMSetDepthStencilState(nullptr, 0);
 	m_context->OMSetBlendState(nullptr, nullptr, BS_MASK);
+
 	m_swapChain->Present(0, 0);
 	
 	m_phongEffect->End();
