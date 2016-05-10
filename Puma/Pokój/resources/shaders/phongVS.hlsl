@@ -15,7 +15,7 @@ cbuffer cbProj : register(b2) //Vertex Shader constant buffer slot 2
 
 cbuffer cbLights : register(b3)
 {
-	float4 lightPos;
+	float4 lightPos[2];
 };
 
 struct VSInput
@@ -30,6 +30,7 @@ struct PSInput
 	float3 norm : NORMAL;
 	float3 viewVec : TEXCOORD0;
 	float3 lightVec : TEXCOORD1;
+	float3 light2Vec : TEXCOORD2;
 };
 
 PSInput main(VSInput i)
@@ -44,6 +45,7 @@ PSInput main(VSInput i)
 	o.norm = normalize(o.norm);
 
 	o.viewVec = normalize(-viewPos.xyz);
-	o.lightVec = normalize((mul(viewMatrix, lightPos) - viewPos).xyz);
+	o.lightVec = normalize((mul(viewMatrix, lightPos[0]) - viewPos).xyz);
+	o.light2Vec = normalize((mul(viewMatrix, lightPos[1]) - viewPos).xyz);
 	return o;
 }

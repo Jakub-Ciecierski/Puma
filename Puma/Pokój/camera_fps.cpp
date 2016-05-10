@@ -16,7 +16,7 @@ CameraFPS::CameraFPS()
 	m_yaw = 0;
 
 	sensitivity = 0.00001;
-	movementSpeed = 0.01;
+	movementSpeed = 0.1;
 }
 
 CameraFPS::~CameraFPS()

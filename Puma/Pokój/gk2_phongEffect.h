@@ -11,7 +11,8 @@ namespace gk2
 		PhongEffect(DeviceHelper& device, std::shared_ptr<ID3D11InputLayout>& layout,
 					std::shared_ptr<ID3D11DeviceContext> context = nullptr);
 
-		void SetLightPosBuffer(const std::shared_ptr<ConstantBuffer<DirectX::XMFLOAT4>>& lightPos);
+		void SetLightPosBuffer(const std::shared_ptr<ConstantBuffer<DirectX::XMFLOAT4, 2>>& lightPos);
+		void SetLightColorBuffer(const std::shared_ptr<ConstantBuffer<DirectX::XMFLOAT4, 3>>& lightColor);
 		void SetSurfaceColorBuffer(const std::shared_ptr<ConstantBuffer<DirectX::XMFLOAT4>>& surfaceColor);
 
 	protected:
@@ -21,7 +22,8 @@ namespace gk2
 	private:
 		static const std::wstring ShaderName;
 
-		std::shared_ptr<ConstantBuffer<DirectX::XMFLOAT4>> m_lightPosCB;
+		std::shared_ptr<ConstantBuffer<DirectX::XMFLOAT4, 2>> m_lightPosCB;
+		std::shared_ptr<ConstantBuffer<DirectX::XMFLOAT4, 3>> m_lightColorCB;
 		std::shared_ptr<ConstantBuffer<DirectX::XMFLOAT4>> m_surfaceColorCB;
 	};
 }

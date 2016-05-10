@@ -5,7 +5,6 @@
 #include "gk2_meshLoader.h"
 #include "gk2_camera.h"
 #include "gk2_phongEffect.h"
-#include "gk2_lightShadowEffect.h"
 #include "gk2_constantBuffer.h"
 #include "particles.h"
 #include "camera_fps.h"
@@ -75,12 +74,12 @@ private:
 	std::shared_ptr<CBMatrix> m_worldCB;
 	std::shared_ptr<CBMatrix> m_viewCB;
 	std::shared_ptr<CBMatrix> m_projCB;
-	std::shared_ptr<ConstantBuffer<DirectX::XMFLOAT4>> m_lightPosCB;
+	std::shared_ptr<ConstantBuffer<DirectX::XMFLOAT4, 2>> m_lightPosCB;
+	std::shared_ptr<ConstantBuffer<DirectX::XMFLOAT4, 3>> m_lightColorCB;
 	std::shared_ptr<ConstantBuffer<DirectX::XMFLOAT4>> m_surfaceColorCB;
 	std::shared_ptr<ConstantBuffer<DirectX::XMFLOAT4>> m_cameraPosCB;
 
 	std::shared_ptr<PhongEffect> m_phongEffect;
-	std::shared_ptr<LightShadowEffect> m_lightShadowEffect;
 	std::shared_ptr<ParticleSystem> m_particles;
 	std::shared_ptr<ID3D11InputLayout> m_layout;
 
@@ -96,11 +95,14 @@ private:
 
 
 	std::vector<DirectX::XMFLOAT3> m_meshVertexPos[6];
+	std::vector<VertexPosNormal> m_meshVertices[6];
 	std::vector<Triangle> m_meshTriangles[6];
 	std::vector<Edge> m_meshEdges[6];
 	DirectX::XMMATRIX m_meshMtx[6];
 	std::shared_ptr<ID3D11Buffer> m_vbMesh[6];
 	std::shared_ptr<ID3D11Buffer> m_ibMesh[6];
+	std::shared_ptr<ID3D11Buffer> m_vbShadow;
+	std::shared_ptr<ID3D11Buffer> m_ibShadow;
 
 	void LoadMeshPart(std::string filename, int partIdx);
 	void InitializeMesh();
@@ -115,6 +117,11 @@ private:
 	void UpdateCamera(const DirectX::XMMATRIX& view) const;
 	void UpdateCameraControl();
 	void UpdateRobot(float dt);
+
+	void SetLight() const;
+	void OffLight() const;
+	void UpdateShadowGeometry();
+	void DrawShadowGeometry();
 
 	void DrawScene(bool mirrored = false);
 	void DrawRoom();

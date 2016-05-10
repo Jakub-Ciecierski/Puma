@@ -42,12 +42,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="gk2_particles.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="gk2_room.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -93,9 +87,6 @@
     <ClCompile Include="WICTextureLoader.cpp">
       <Filter>Source Files\framework</Filter>
     </ClCompile>
-    <ClCompile Include="gk2_lightShadowEffect.cpp">
-      <Filter>Source Files\effects</Filter>
-    </ClCompile>
     <ClCompile Include="scene.cpp">
       <Filter>Source Files\framework\puma</Filter>
     </ClCompile>
@@ -113,12 +104,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="gk2_particles.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="gk2_room.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="gk2_applicationBase.h">
       <Filter>Header Files\framework</Filter>
     </ClInclude>
@@ -160,9 +145,6 @@
     </ClInclude>
     <ClInclude Include="WICTextureLoader.h">
       <Filter>Header Files\framework</Filter>
-    </ClInclude>
-    <ClInclude Include="gk2_lightShadowEffect.h">
-      <Filter>Header Files\effects</Filter>
     </ClInclude>
     <ClInclude Include="scene.h">
       <Filter>Header Files\puma</Filter>
@@ -225,12 +207,6 @@
       <Filter>Resource Files\shaders</Filter>
     </FxCompile>
     <FxCompile Include="resources\shaders\particlesVS.hlsl">
-      <Filter>Resource Files\shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="resources\shaders\lightShadowVS.hlsl">
-      <Filter>Resource Files\shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="resources\shaders\lightShadowPS.hlsl">
       <Filter>Resource Files\shaders</Filter>
     </FxCompile>
   </ItemGroup>

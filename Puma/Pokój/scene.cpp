@@ -4,6 +4,7 @@
 #include "gk2_window.h"
 #include "gk2_utils.h"
 #include <array>
+#include "gk2_math.h"
 
 #include "common.h"
 #include "Mtxlib.h"
@@ -15,6 +16,10 @@ using namespace DirectX;
 const unsigned int Scene::VB_STRIDE = sizeof(VertexPosNormal);
 const unsigned int Scene::VB_OFFSET = 0;
 const unsigned int Scene::BS_MASK = 0xffffffff;
+
+const XMFLOAT4 LIGHT_POS = XMFLOAT4(-3.0f, 3.0f, 3.0f, 1.0f);
+const XMFLOAT4 LIGHT2_POS = XMFLOAT4(3.0f, 2.0f, -3.0f, 1.0f);
+const XMFLOAT4 LIGHT_COLOR = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 
 float BACKGROUND_COLOR_BUFF[4] = { 0.7f, 0.7f, 0.7f, 1.0f };
 XMFLOAT4 BACKGROUND_COLOR(BACKGROUND_COLOR_BUFF);
@@ -45,7 +50,8 @@ void Scene::InitializeConstantBuffers()
 	m_projCB = make_shared<CBMatrix>(m_device);
 	m_viewCB = make_shared<CBMatrix>(m_device);
 	m_worldCB = make_shared<CBMatrix>(m_device);
-	m_lightPosCB = make_shared<ConstantBuffer<XMFLOAT4>>(m_device);
+	m_lightPosCB = make_shared<ConstantBuffer<XMFLOAT4, 2>>(m_device);
+	m_lightColorCB = make_shared<ConstantBuffer<XMFLOAT4, 3>>(m_device);
 	m_surfaceColorCB = make_shared<ConstantBuffer<XMFLOAT4>>(m_device);
 	m_cameraPosCB = make_shared<ConstantBuffer<XMFLOAT4>>(m_device);
 }
@@ -57,6 +63,9 @@ void Scene::InitializeCamera()
 	m_projMtx = XMMatrixPerspectiveFovLH(XM_PIDIV4, ar, 0.01f, 100.0f);
 	m_projCB->Update(m_context, m_projMtx);
 	m_camera.Zoom(5);
+	cameraFPS.update();
+	cameraFPS.moveBackward(80.0f);
+	cameraFPS.update();
 	UpdateCamera();
 }
 
@@ -86,6 +95,7 @@ void Scene::LoadMeshPart(string filename, int partIdx)
 		vertex.Pos = XMFLOAT3(m_meshVertexPos[partIdx][idx].x, m_meshVertexPos[partIdx][idx].y, m_meshVertexPos[partIdx][idx].z);
 		vertex.Normal = XMFLOAT3(x, y, z);
 		vertices.push_back(vertex);
+		m_meshVertices[partIdx].push_back(vertex);
 	}
 
 	// Load triangles
@@ -137,8 +147,8 @@ void Scene::CreateScene()
 	cylinder.setColor(XMFLOAT4(1.0, 0.0, 0.0, 1.0));
 
 	lightSource = loader.GetSphere(100, 100);
-	lightSource.setWorldMatrix(XMMatrixTranslation(4.0f, 3.0f, 4.0f));
-	lightSource.setColor(XMFLOAT4(1.0, 1.0, 0.0, 1.0));
+	lightSource.setWorldMatrix(XMMatrixTranslation(LIGHT_POS.x, LIGHT_POS.y, LIGHT_POS.z));
+	lightSource.setColor(XMFLOAT4(LIGHT_COLOR));
 
 	plate = loader.GetQuad();
 	/*
@@ -291,14 +301,8 @@ bool Scene::LoadContent()
 	m_phongEffect->SetViewMtxBuffer(m_viewCB);
 	m_phongEffect->SetWorldMtxBuffer(m_worldCB);
 	m_phongEffect->SetLightPosBuffer(m_lightPosCB);
+	m_phongEffect->SetLightColorBuffer(m_lightColorCB);
 	m_phongEffect->SetSurfaceColorBuffer(m_surfaceColorCB);
-
-	m_lightShadowEffect = make_shared<LightShadowEffect>(m_device, m_layout);
-	m_lightShadowEffect->SetProjMtxBuffer(m_projCB);
-	m_lightShadowEffect->SetViewMtxBuffer(m_viewCB);
-	m_lightShadowEffect->SetWorldMtxBuffer(m_worldCB);
-	m_lightShadowEffect->SetLightPosBuffer(m_lightPosCB);
-	m_lightShadowEffect->SetSurfaceColorBuffer(m_surfaceColorCB);
 
 	m_particles = make_shared<ParticleSystem>(m_device, XMFLOAT3(-1.3f, -0.6f, -0.14f));
 	m_particles->SetViewMtxBuffer(m_viewCB);
@@ -312,6 +316,18 @@ void Scene::UnloadContent()
 		m_vbMesh[i].reset();
 		m_ibMesh[i].reset();
 	}
+
+	m_dssWrite.reset();
+	m_dssTest.reset();
+	m_rsCounterClockwise.reset();
+	m_bsAlpha.reset();
+
+	m_worldCB.reset();
+	m_viewCB.reset();
+	m_projCB.reset();
+	m_lightPosCB.reset();
+	m_lightColorCB.reset();
+	m_surfaceColorCB.reset();
 }
 
 void Scene::UpdateCameraControl() {
@@ -426,11 +442,142 @@ void Scene::Update(float dt)
 	cameraFPS.update();
 	UpdateCameraControl();
 	UpdateRobot(dt);
+	UpdateShadowGeometry();
+}
+
+void Scene::SetLight() const
+//Setup one white positional light at the camera
+//Setup two additional positional lights, green and blue.
+{
+	XMFLOAT4 position[2];
+	ZeroMemory(position, sizeof(XMFLOAT4) * 2);
+	position[0] = LIGHT_POS;
+	position[1] = LIGHT2_POS;
+	m_lightPosCB->Update(m_context, position);
+
+	XMFLOAT4 colors[3];
+	ZeroMemory(colors, sizeof(XMFLOAT4) * 3);
+	colors[0] = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f); //ambient color
+	colors[1] = XMFLOAT4(1.0f, 0.8f, 1.0f, 200.0f); //surface [ka, kd, ks, m]
+	colors[2] = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f); //white light color
+	m_lightColorCB->Update(m_context, colors);
+}
+
+void Scene::OffLight() const
+{
+	XMFLOAT4 position[2];
+	ZeroMemory(position, sizeof(XMFLOAT4) * 2);
+	position[0] = LIGHT_POS;
+	position[1] = LIGHT2_POS;
+	m_lightPosCB->Update(m_context, position);
+
+	XMFLOAT4 colors[3];
+	ZeroMemory(colors, sizeof(XMFLOAT4) * 3);
+	colors[0] = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f); //ambient color
+	colors[1] = XMFLOAT4(1.0f, 0.8f, 1.0f, 200.0f); //surface [ka, kd, ks, m]
+	colors[2] = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f); //white light color
+	m_lightColorCB->Update(m_context, colors);
+}
+
+inline XMFLOAT3 scale(XMFLOAT3 a, float b) { return XMFLOAT3(a.x * b, a.y * b, a.z * b); }
+inline XMFLOAT3 add(XMFLOAT3 a, XMFLOAT3 b) { return XMFLOAT3(a.x + b.x, a.y + b.y, a.z + b.z); }
+inline XMFLOAT3 sub(XMFLOAT3 a, XMFLOAT3 b) { return XMFLOAT3(a.x - b.x, a.y - b.y, a.z - b.z); }
+
+int contourEdges = 0;
+void Scene::UpdateShadowGeometry()
+{
+	int partIdx = 2;
+	XMMATRIX mat = m_meshMtx[partIdx];
+	vector<VertexPosNormal> vertices;
+	vector<unsigned short> indices;
+	contourEdges = 0;
+	for (int i = 0; i < m_meshEdges[partIdx].size(); ++i) {
+		auto edge = m_meshEdges[partIdx][i];
+		auto v1 = XMVector3Transform(XMLoadFloat3(&m_meshVertexPos[partIdx][edge.vertexIdx1]), mat);
+		auto v2 = XMVector3Transform(XMLoadFloat3(&m_meshVertexPos[partIdx][edge.vertexIdx2]), mat);
+		//auto v1 = m_meshVertexPos[partIdx][edge.vertexIdx1];
+		//auto v2 = m_meshVertexPos[partIdx][edge.vertexIdx2];
+		auto t1 = m_meshTriangles[partIdx][edge.triangleIdx1];
+		auto t2 = m_meshTriangles[partIdx][edge.triangleIdx2];
+		auto lightPos = XMLoadFloat4(&LIGHT_POS);
+		auto t1v1 = XMVector3Transform(XMLoadFloat3(&m_meshVertices[partIdx][t1.vertexIdx1].Pos), mat);
+		auto t1v2 = XMVector3Transform(XMLoadFloat3(&m_meshVertices[partIdx][t1.vertexIdx2].Pos), mat);
+		auto t1v3 = XMVector3Transform(XMLoadFloat3(&m_meshVertices[partIdx][t1.vertexIdx3].Pos), mat);
+		auto t2v1 = XMVector3Transform(XMLoadFloat3(&m_meshVertices[partIdx][t2.vertexIdx1].Pos), mat);
+		auto t2v2 = XMVector3Transform(XMLoadFloat3(&m_meshVertices[partIdx][t2.vertexIdx2].Pos), mat);
+		auto t2v3 = XMVector3Transform(XMLoadFloat3(&m_meshVertices[partIdx][t2.vertexIdx3].Pos), mat);
+		auto t1lightDir = (t1v1 + t1v2 + t1v3) / 3 - lightPos;
+		auto t2lightDir = (t2v1 + t2v2 + t2v3) / 3 - lightPos;
+		auto t1normal = XMVector3Normalize(XMVector3Cross(t1v2 - t1v1, t1v3 - t1v2));
+		auto t2normal = XMVector3Normalize(XMVector3Cross(t2v2 - t2v1, t2v3 - t2v2));
+		auto t1dot = XMVectorGetX(XMVector3Dot(t1lightDir, t1normal));
+		auto t2dot = XMVectorGetX(XMVector3Dot(t2lightDir, t2normal));
+		bool first = t1dot >= 0.0 && t2dot < 0;
+		bool second = t2dot >= 0.0 && t1dot < 0;
+		float GO_TO_INFINITY = 1000.0f;
+		if (first || second) {
+			++contourEdges;
+			VertexPosNormal vertex1;
+			VertexPosNormal vertex2;
+			VertexPosNormal vertex3;
+			VertexPosNormal vertex4;
+			XMStoreFloat3(&vertex1.Pos, v1);
+			XMStoreFloat3(&vertex2.Pos, v2);
+			XMStoreFloat3(&vertex3.Pos, v1 + XMVector3Normalize(v1 - lightPos) * GO_TO_INFINITY);
+			XMStoreFloat3(&vertex4.Pos, v2 + XMVector3Normalize(v2 - lightPos) * GO_TO_INFINITY);
+			vertex1.Normal = XMFLOAT3(1, 0, 0);
+			vertex2.Normal = XMFLOAT3(1, 0, 0);
+			vertex3.Normal = XMFLOAT3(1, 0, 0);
+			vertex4.Normal = XMFLOAT3(1, 0, 0);
+			int idx = vertices.size();
+			vertices.push_back(vertex1);
+			vertices.push_back(vertex2);
+			vertices.push_back(vertex3);
+			vertices.push_back(vertex4);
+			if (first) {
+				indices.push_back(idx);
+				indices.push_back(idx + 1);
+				indices.push_back(idx + 2);
+				indices.push_back(idx + 2);
+				indices.push_back(idx + 1);
+				indices.push_back(idx + 3);
+			}
+			if (second) {
+				indices.push_back(idx + 1);
+				indices.push_back(idx);
+				indices.push_back(idx + 2);
+				indices.push_back(idx + 1);
+				indices.push_back(idx + 2);
+				indices.push_back(idx + 3);
+			}
+		}
+	}
+	m_vbShadow = m_device.CreateVertexBuffer(vertices);
+	m_ibShadow = m_device.CreateIndexBuffer(reinterpret_cast<const unsigned short*>(indices.data()), sizeof(unsigned short) * indices.size());
+}
+
+void Scene::DrawShadowGeometry()
+{
+	m_context->RSSetState(m_rsCounterClockwise.get());
+	m_surfaceColorCB->Update(m_context, XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f));
+
+	m_worldCB->Update(m_context, XMMatrixIdentity());
+
+	auto b = m_vbShadow.get();
+	m_context->IASetVertexBuffers(0, 1, &b, &VB_STRIDE, &VB_OFFSET);
+	m_context->IASetIndexBuffer(m_ibShadow.get(), DXGI_FORMAT_R16_UINT, 0);
+	m_context->DrawIndexed(contourEdges * 6, 0, 0);
+
+	m_context->RSSetState(nullptr);
 }
 
 void Scene::DrawScene(bool mirrored)
 {
 	//m_surfaceColorCB->Update(m_context, BACKGROUND_COLOR);
+	
+	// Shadows step #1: draw unlit
+
+	OffLight();
 
 	if (!mirrored) {
 		m_context->OMSetBlendState(m_bsAlpha.get(), nullptr, BS_MASK);
@@ -452,13 +599,19 @@ void Scene::DrawScene(bool mirrored)
 
 	DrawRoom();
 	DrawMesh();
+
+	// Shadows step #2: create stencil buffer
+	DrawShadowGeometry();
+
+	// Shadows step #3: draw lit
+
+	SetLight();
 }
 
 void Scene::DrawMesh() const
 {
 	for (int i = 0; i < 6; ++i) {
 		m_worldCB->Update(m_context, m_meshMtx[i]);
-		// m_context->UpdateSubresource(m_cbWorld.get(), 0, nullptr, &m_meshMtx[i], 0, 0);
 
 		auto b = m_vbMesh[i].get();
 		m_context->IASetVertexBuffers(0, 1, &b, &VB_STRIDE, &VB_OFFSET);
@@ -467,8 +620,8 @@ void Scene::DrawMesh() const
 	}
 }
 
-void Scene::DrawRoom() {
-
+void Scene::DrawRoom()
+{
 	m_worldCB->Update(m_context, floor.getWorldMatrix());
 	m_surfaceColorCB->Update(m_context, floor.getColor());
 	floor.Render(m_context);
@@ -533,11 +686,6 @@ void Scene::Render()
 	
 	DrawMirroredScene();
 	DrawScene(false);
-	DrawMesh();
-
-	//TODO: Replace with light and shadow map effect. DONE
-	//m_lightShadowEffect->Begin(m_context);
-	//m_lightShadowEffect->End();
 
 	m_context->OMSetBlendState(m_bsAlpha.get(), nullptr, BS_MASK);
 	m_context->OMSetDepthStencilState(m_dssNoWrite.get(), 0);

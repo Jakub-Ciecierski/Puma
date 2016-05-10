@@ -13,10 +13,16 @@ PhongEffect::PhongEffect(DeviceHelper& device, shared_ptr<ID3D11InputLayout>& la
 	Initialize(device, layout, ShaderName);
 }
 
-void PhongEffect::SetLightPosBuffer(const shared_ptr<ConstantBuffer<XMFLOAT4>>& lightPos)
+void PhongEffect::SetLightPosBuffer(const shared_ptr<ConstantBuffer<XMFLOAT4, 2>>& lightPos)
 {
 	if (lightPos != nullptr)
 		m_lightPosCB = lightPos;
+}
+
+void PhongEffect::SetLightColorBuffer(const shared_ptr<ConstantBuffer<XMFLOAT4, 3>>& lightColor)
+{
+	if (lightColor != nullptr)
+		m_lightColorCB = lightColor;
 }
 
 void PhongEffect::SetSurfaceColorBuffer(const shared_ptr<ConstantBuffer<XMFLOAT4>>& surfaceColor)
@@ -34,6 +40,6 @@ void PhongEffect::SetVertexShaderData()
 
 void PhongEffect::SetPixelShaderData()
 {
-	ID3D11Buffer* psb[1] = { m_surfaceColorCB->getBufferObject().get() };
-	m_context->PSSetConstantBuffers(0, 1, psb);
+	ID3D11Buffer* psb[2] = { m_surfaceColorCB->getBufferObject().get(), m_lightColorCB->getBufferObject().get() };
+	m_context->PSSetConstantBuffers(0, 2, psb);
 }
