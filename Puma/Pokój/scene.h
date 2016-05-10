@@ -85,11 +85,17 @@ private:
 
 	std::shared_ptr<ID3D11RasterizerState> m_rsCullNone;
 	std::shared_ptr<ID3D11BlendState> m_bsAlpha;
+	std::shared_ptr<ID3D11BlendState> m_bsNoColorWrite;
 	std::shared_ptr<ID3D11DepthStencilState> m_dssNoWrite;
 
 	//Depth stencil state used to perform stencil test when drawing mirrored scene
 	std::shared_ptr<ID3D11DepthStencilState> m_dssTest;
+	std::shared_ptr<ID3D11DepthStencilState> m_dssTestNoWrite;
 	std::shared_ptr<ID3D11DepthStencilState> m_dssWrite;
+	std::shared_ptr<ID3D11DepthStencilState> m_dsShadowWriteFront;
+	std::shared_ptr<ID3D11DepthStencilState> m_dsShadowWriteBack;
+	std::shared_ptr<ID3D11DepthStencilState> m_dsShadowTest;
+	std::shared_ptr<ID3D11DepthStencilState> m_dsShadowTestComplement;
 	//Rasterizer state used to define front faces as counter-clockwise, used when drawing mirrored scene
 	std::shared_ptr<ID3D11RasterizerState> m_rsCounterClockwise;
 
@@ -99,10 +105,11 @@ private:
 	std::vector<Triangle> m_meshTriangles[6];
 	std::vector<Edge> m_meshEdges[6];
 	DirectX::XMMATRIX m_meshMtx[6];
+	int m_contourEdges[6];
 	std::shared_ptr<ID3D11Buffer> m_vbMesh[6];
 	std::shared_ptr<ID3D11Buffer> m_ibMesh[6];
-	std::shared_ptr<ID3D11Buffer> m_vbShadow;
-	std::shared_ptr<ID3D11Buffer> m_ibShadow;
+	std::shared_ptr<ID3D11Buffer> m_vbShadow[6];
+	std::shared_ptr<ID3D11Buffer> m_ibShadow[6];
 
 	void LoadMeshPart(std::string filename, int partIdx);
 	void InitializeMesh();
@@ -123,7 +130,8 @@ private:
 	void UpdateShadowGeometry();
 	void DrawShadowGeometry();
 
-	void DrawScene(bool mirrored = false);
+	void DrawPlate(bool lit);
+	void DrawScene(bool mirrored);
 	void DrawRoom();
 	void DrawMesh() const;
 

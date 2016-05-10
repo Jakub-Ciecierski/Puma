@@ -120,7 +120,7 @@ void Scene::LoadMeshPart(string filename, int partIdx)
 	fclose(file);
 
 	m_vbMesh[partIdx] = m_device.CreateVertexBuffer(vertices);
-	m_ibMesh[partIdx] = m_device.CreateIndexBuffer(reinterpret_cast<const unsigned short*>(indices.data()), sizeof(unsigned short) * indices.size());
+	m_ibMesh[partIdx] = m_device.CreateIndexBuffer(indices);
 }
 
 void Scene::InitializeMesh()
@@ -142,8 +142,8 @@ void Scene::CreateScene()
 	cylinder = loader.GetCylinder(100, 100);
 	cylinder.setWorldMatrix(
 		XMMatrixScaling(1.0f, 2.0f, 1.0f)
-		* XMMatrixRotationX(XM_PIDIV2)
-		* XMMatrixTranslation(-4.0f, 0.5f, -4.0f));
+		* XMMatrixRotationX(XM_PIDIV4)
+		* XMMatrixTranslation(2.0f, -1.0f, -2.0f));
 	cylinder.setColor(XMFLOAT4(1.0, 0.0, 0.0, 1.0));
 
 	lightSource = loader.GetSphere(100, 100);
@@ -171,7 +171,7 @@ void Scene::CreateScene()
 		* XMMatrixTranslation(-1.5f, 0.25f, 0.0f);
 
 	plate.setWorldMatrix(plateWorldMatrix);
-	plate.setColor(XMFLOAT4(0.2, 0.1, 0.0, 0.7));
+	plate.setColor(XMFLOAT4(0.6, 0.3, 0.0, 0.7));
 	
 	XMVECTOR det;
 	m_mirrorMtx = 
@@ -245,17 +245,22 @@ void Scene::InitializeRenderStates()
 	// Back Faces never pass
 	dssDesc.BackFace.StencilFunc = D3D11_COMPARISON_NEVER;
 	dssDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+	//dssDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
 
 	//Setup depth stencil state for writing
 	m_dssWrite = m_device.CreateDepthStencilState(dssDesc);
 
 	////  DSS TEST ///
+	//dssDesc.DepthFunc = D3D11_COMPARISON_LESS;
 	dssDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
 	dssDesc.FrontFace.StencilFunc = D3D11_COMPARISON_EQUAL;
 	dssDesc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
 
 	//Setup depth stencil state for testing
 	m_dssTest = m_device.CreateDepthStencilState(dssDesc);
+
+	dssDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+	m_dssTestNoWrite = m_device.CreateDepthStencilState(dssDesc);
 
 	D3D11_RASTERIZER_DESC rsDesc = m_device.DefaultRasterizerDesc();
 	rsDesc.FrontCounterClockwise = true;
@@ -291,6 +296,36 @@ void Scene::InitializeRenderStates()
 	dssDesc = m_device.DefaultDepthStencilDesc();
 	dssDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
 	m_dssNoWrite = m_device.CreateDepthStencilState(dssDesc);
+
+	// <Shadow>
+	D3D11_DEPTH_STENCIL_DESC dss2Desc = m_device.DefaultDepthStencilDesc();
+	//Setup depth stencil state for writing
+	dss2Desc.StencilEnable = true;
+	dss2Desc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
+	dss2Desc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_INCR;
+	dss2Desc.BackFace.StencilFunc = D3D11_COMPARISON_NEVER;
+	dss2Desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+	m_dsShadowWriteFront = m_device.CreateDepthStencilState(dss2Desc);
+	dss2Desc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_DECR;
+	m_dsShadowWriteBack = m_device.CreateDepthStencilState(dss2Desc);
+
+	//Setup depth stencil state for testing
+	dss2Desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+	dss2Desc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+	dss2Desc.FrontFace.StencilFunc = D3D11_COMPARISON_EQUAL;
+	dss2Desc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+	m_dsShadowTest = m_device.CreateDepthStencilState(dss2Desc);
+	dss2Desc.FrontFace.StencilFunc = D3D11_COMPARISON_NOT_EQUAL;
+	m_dsShadowTestComplement = m_device.CreateDepthStencilState(dss2Desc);
+
+	auto bs2Desc = m_device.DefaultBlendDesc();
+	bs2Desc.RenderTarget[0].SrcBlend = D3D11_BLEND_ZERO;
+	bs2Desc.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
+	bs2Desc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+	//bs2Desc.RenderTarget[0].BlendOp = false;
+	bs2Desc.RenderTarget[0].RenderTargetWriteMask = 0;
+	m_bsNoColorWrite = m_device.CreateBlendState(bs2Desc);
+	// </Shadow>
 }
 
 bool Scene::LoadContent()
@@ -339,8 +374,8 @@ void Scene::UpdateCameraControl() {
 	MouseState currentState;
 	KeyboardState keyboardState;
 
-	//float mouseBoost = 300.0f;
-	float mouseBoost = 1.0f;
+	float mouseBoost = 300.0f;
+	//float mouseBoost = 1.0f;
 
 	if (m_keyboard->GetState(keyboardState)) {
 		float boost = 1.0f;
@@ -484,133 +519,106 @@ void Scene::OffLight() const
 	m_lightColorCB->Update(m_context, colors);
 }
 
-inline XMFLOAT3 scale(XMFLOAT3 a, float b) { return XMFLOAT3(a.x * b, a.y * b, a.z * b); }
-inline XMFLOAT3 add(XMFLOAT3 a, XMFLOAT3 b) { return XMFLOAT3(a.x + b.x, a.y + b.y, a.z + b.z); }
-inline XMFLOAT3 sub(XMFLOAT3 a, XMFLOAT3 b) { return XMFLOAT3(a.x - b.x, a.y - b.y, a.z - b.z); }
+bool cameraInShadow = false;
 
-int contourEdges = 0;
 void Scene::UpdateShadowGeometry()
 {
-	int partIdx = 2;
-	XMMATRIX mat = m_meshMtx[partIdx];
-	vector<VertexPosNormal> vertices;
-	vector<unsigned short> indices;
-	contourEdges = 0;
-	for (int i = 0; i < m_meshEdges[partIdx].size(); ++i) {
-		auto edge = m_meshEdges[partIdx][i];
-		auto v1 = XMVector3Transform(XMLoadFloat3(&m_meshVertexPos[partIdx][edge.vertexIdx1]), mat);
-		auto v2 = XMVector3Transform(XMLoadFloat3(&m_meshVertexPos[partIdx][edge.vertexIdx2]), mat);
-		//auto v1 = m_meshVertexPos[partIdx][edge.vertexIdx1];
-		//auto v2 = m_meshVertexPos[partIdx][edge.vertexIdx2];
-		auto t1 = m_meshTriangles[partIdx][edge.triangleIdx1];
-		auto t2 = m_meshTriangles[partIdx][edge.triangleIdx2];
-		auto lightPos = XMLoadFloat4(&LIGHT_POS);
-		auto t1v1 = XMVector3Transform(XMLoadFloat3(&m_meshVertices[partIdx][t1.vertexIdx1].Pos), mat);
-		auto t1v2 = XMVector3Transform(XMLoadFloat3(&m_meshVertices[partIdx][t1.vertexIdx2].Pos), mat);
-		auto t1v3 = XMVector3Transform(XMLoadFloat3(&m_meshVertices[partIdx][t1.vertexIdx3].Pos), mat);
-		auto t2v1 = XMVector3Transform(XMLoadFloat3(&m_meshVertices[partIdx][t2.vertexIdx1].Pos), mat);
-		auto t2v2 = XMVector3Transform(XMLoadFloat3(&m_meshVertices[partIdx][t2.vertexIdx2].Pos), mat);
-		auto t2v3 = XMVector3Transform(XMLoadFloat3(&m_meshVertices[partIdx][t2.vertexIdx3].Pos), mat);
-		auto t1lightDir = (t1v1 + t1v2 + t1v3) / 3 - lightPos;
-		auto t2lightDir = (t2v1 + t2v2 + t2v3) / 3 - lightPos;
-		auto t1normal = XMVector3Normalize(XMVector3Cross(t1v2 - t1v1, t1v3 - t1v2));
-		auto t2normal = XMVector3Normalize(XMVector3Cross(t2v2 - t2v1, t2v3 - t2v2));
-		auto t1dot = XMVectorGetX(XMVector3Dot(t1lightDir, t1normal));
-		auto t2dot = XMVectorGetX(XMVector3Dot(t2lightDir, t2normal));
-		bool first = t1dot >= 0.0 && t2dot < 0;
-		bool second = t2dot >= 0.0 && t1dot < 0;
-		float GO_TO_INFINITY = 1000.0f;
-		if (first || second) {
-			++contourEdges;
-			VertexPosNormal vertex1;
-			VertexPosNormal vertex2;
-			VertexPosNormal vertex3;
-			VertexPosNormal vertex4;
-			XMStoreFloat3(&vertex1.Pos, v1);
-			XMStoreFloat3(&vertex2.Pos, v2);
-			XMStoreFloat3(&vertex3.Pos, v1 + XMVector3Normalize(v1 - lightPos) * GO_TO_INFINITY);
-			XMStoreFloat3(&vertex4.Pos, v2 + XMVector3Normalize(v2 - lightPos) * GO_TO_INFINITY);
-			vertex1.Normal = XMFLOAT3(1, 0, 0);
-			vertex2.Normal = XMFLOAT3(1, 0, 0);
-			vertex3.Normal = XMFLOAT3(1, 0, 0);
-			vertex4.Normal = XMFLOAT3(1, 0, 0);
-			int idx = vertices.size();
-			vertices.push_back(vertex1);
-			vertices.push_back(vertex2);
-			vertices.push_back(vertex3);
-			vertices.push_back(vertex4);
-			if (first) {
-				indices.push_back(idx);
-				indices.push_back(idx + 1);
-				indices.push_back(idx + 2);
-				indices.push_back(idx + 2);
-				indices.push_back(idx + 1);
-				indices.push_back(idx + 3);
-			}
-			if (second) {
-				indices.push_back(idx + 1);
-				indices.push_back(idx);
-				indices.push_back(idx + 2);
-				indices.push_back(idx + 1);
-				indices.push_back(idx + 2);
-				indices.push_back(idx + 3);
+	for (int partIdx = 0; partIdx < 6; ++partIdx) {
+		XMMATRIX mat = m_meshMtx[partIdx];
+		vector<VertexPosNormal> vertices;
+		vector<unsigned short> indices;
+		m_contourEdges[partIdx] = 0;
+		for (int i = 0; i < m_meshEdges[partIdx].size(); ++i) {
+			auto edge = m_meshEdges[partIdx][i];
+			auto v1 = XMVector3Transform(XMLoadFloat3(&m_meshVertexPos[partIdx][edge.vertexIdx1]), mat);
+			auto v2 = XMVector3Transform(XMLoadFloat3(&m_meshVertexPos[partIdx][edge.vertexIdx2]), mat);
+			auto t1 = m_meshTriangles[partIdx][edge.triangleIdx1];
+			auto t2 = m_meshTriangles[partIdx][edge.triangleIdx2];
+			auto lightPos = XMLoadFloat4(&LIGHT_POS);
+			auto t1v1 = XMVector3Transform(XMLoadFloat3(&m_meshVertices[partIdx][t1.vertexIdx1].Pos), mat);
+			auto t1v2 = XMVector3Transform(XMLoadFloat3(&m_meshVertices[partIdx][t1.vertexIdx2].Pos), mat);
+			auto t1v3 = XMVector3Transform(XMLoadFloat3(&m_meshVertices[partIdx][t1.vertexIdx3].Pos), mat);
+			auto t2v1 = XMVector3Transform(XMLoadFloat3(&m_meshVertices[partIdx][t2.vertexIdx1].Pos), mat);
+			auto t2v2 = XMVector3Transform(XMLoadFloat3(&m_meshVertices[partIdx][t2.vertexIdx2].Pos), mat);
+			auto t2v3 = XMVector3Transform(XMLoadFloat3(&m_meshVertices[partIdx][t2.vertexIdx3].Pos), mat);
+			auto t1lightDir = (t1v1 + t1v2 + t1v3) / 3 - lightPos;
+			auto t2lightDir = (t2v1 + t2v2 + t2v3) / 3 - lightPos;
+			auto t1normal = XMVector3Normalize(XMVector3Cross(t1v2 - t1v1, t1v3 - t1v2));
+			auto t2normal = XMVector3Normalize(XMVector3Cross(t2v2 - t2v1, t2v3 - t2v2));
+			auto t1dot = XMVectorGetX(XMVector3Dot(t1lightDir, t1normal));
+			auto t2dot = XMVectorGetX(XMVector3Dot(t2lightDir, t2normal));
+			bool first = t1dot >= 0.0 && t2dot < 0;
+			bool second = t2dot >= 0.0 && t1dot < 0;
+			float GO_TO_INFINITY = 1000.0f;
+			if (first || second) {
+				++m_contourEdges[partIdx];
+				VertexPosNormal vertex1;
+				VertexPosNormal vertex2;
+				VertexPosNormal vertex3;
+				VertexPosNormal vertex4;
+				XMStoreFloat3(&vertex1.Pos, v1);
+				XMStoreFloat3(&vertex2.Pos, v2);
+				XMStoreFloat3(&vertex3.Pos, v1 + XMVector3Normalize(v1 - lightPos) * GO_TO_INFINITY);
+				XMStoreFloat3(&vertex4.Pos, v2 + XMVector3Normalize(v2 - lightPos) * GO_TO_INFINITY);
+				vertex1.Normal = XMFLOAT3(1, 0, 0);
+				vertex2.Normal = XMFLOAT3(1, 0, 0);
+				vertex3.Normal = XMFLOAT3(1, 0, 0);
+				vertex4.Normal = XMFLOAT3(1, 0, 0);
+				int idx = vertices.size();
+				vertices.push_back(vertex1);
+				vertices.push_back(vertex2);
+				vertices.push_back(vertex3);
+				vertices.push_back(vertex4);
+				if (first) {
+					indices.push_back(idx);
+					indices.push_back(idx + 1);
+					indices.push_back(idx + 2);
+					indices.push_back(idx + 2);
+					indices.push_back(idx + 1);
+					indices.push_back(idx + 3);
+				}
+				if (second) {
+					indices.push_back(idx + 1);
+					indices.push_back(idx);
+					indices.push_back(idx + 2);
+					indices.push_back(idx + 1);
+					indices.push_back(idx + 2);
+					indices.push_back(idx + 3);
+				}
 			}
 		}
+		m_vbShadow[partIdx] = m_device.CreateVertexBuffer(vertices);
+		m_ibShadow[partIdx] = m_device.CreateIndexBuffer(indices);
 	}
-	m_vbShadow = m_device.CreateVertexBuffer(vertices);
-	m_ibShadow = m_device.CreateIndexBuffer(reinterpret_cast<const unsigned short*>(indices.data()), sizeof(unsigned short) * indices.size());
 }
 
 void Scene::DrawShadowGeometry()
 {
-	m_context->RSSetState(m_rsCounterClockwise.get());
-	m_surfaceColorCB->Update(m_context, XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f));
+	//m_surfaceColorCB->Update(m_context, XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f));
 
 	m_worldCB->Update(m_context, XMMatrixIdentity());
-
-	auto b = m_vbShadow.get();
-	m_context->IASetVertexBuffers(0, 1, &b, &VB_STRIDE, &VB_OFFSET);
-	m_context->IASetIndexBuffer(m_ibShadow.get(), DXGI_FORMAT_R16_UINT, 0);
-	m_context->DrawIndexed(contourEdges * 6, 0, 0);
-
-	m_context->RSSetState(nullptr);
+	for (int i = 0; i < 6; ++i) {
+		auto b = m_vbShadow[i].get();
+		m_context->IASetVertexBuffers(0, 1, &b, &VB_STRIDE, &VB_OFFSET);
+		m_context->IASetIndexBuffer(m_ibShadow[i].get(), DXGI_FORMAT_R16_UINT, 0);
+		m_context->DrawIndexed(m_contourEdges[i] * 6, 0, 0);
+	}
 }
 
 void Scene::DrawScene(bool mirrored)
 {
 	//m_surfaceColorCB->Update(m_context, BACKGROUND_COLOR);
-	
-	// Shadows step #1: draw unlit
-
-	OffLight();
-
-	if (!mirrored) {
-		m_context->OMSetBlendState(m_bsAlpha.get(), nullptr, BS_MASK);
-		m_surfaceColorCB->Update(m_context, plate.getColor());
-	}
-	m_worldCB->Update(m_context, plate.getWorldMatrix());
-	plate.Render(m_context);
-	if (!mirrored) {
-		m_context->OMSetBlendState(nullptr, nullptr, BS_MASK);
-	}
 
 	m_worldCB->Update(m_context, cylinder.getWorldMatrix());
 	m_surfaceColorCB->Update(m_context, cylinder.getColor());
 	cylinder.Render(m_context);
-	
+
 	m_worldCB->Update(m_context, lightSource.getWorldMatrix());
 	m_surfaceColorCB->Update(m_context, lightSource.getColor());
 	lightSource.Render(m_context);
 
 	DrawRoom();
 	DrawMesh();
-
-	// Shadows step #2: create stencil buffer
-	DrawShadowGeometry();
-
-	// Shadows step #3: draw lit
-
-	SetLight();
 }
 
 void Scene::DrawMesh() const
@@ -644,12 +652,10 @@ void Scene::DrawRoom()
 
 void Scene::DrawMirroredScene()
 {
-	m_phongEffect->Begin(m_context);
-
-	m_context->OMSetDepthStencilState(m_dssWrite.get(), 1); 
+	m_context->OMSetDepthStencilState(m_dssWrite.get(), -1); 
 	m_worldCB->Update(m_context, plate.getWorldMatrix());
 	plate.Render(m_context);
-	m_context->OMSetDepthStencilState(m_dssTest.get(), 1); // NEW
+	m_context->OMSetDepthStencilState(m_dssTest.get(), -1); // NEW
 
 	//Setup render state and view matrix for rendering the mirrored world
 	DirectX::XMMATRIX ViewMirror = m_mirrorMtx * cameraFPS.getViewMatrix();
@@ -660,23 +666,44 @@ void Scene::DrawMirroredScene()
 
 	m_phongEffect->End();
 
-
 	// Particles will not render with counter-clockwise
 	m_context->RSSetState(nullptr);
 
 	// Render Particles
 	m_context->OMSetBlendState(m_bsAlpha.get(), nullptr, BS_MASK);
-	m_context->OMSetDepthStencilState(m_dssNoWrite.get(), 0);
+	m_context->OMSetDepthStencilState(m_dssTestNoWrite.get(), 1);
 	m_particles->Render(m_context);
 	m_context->OMSetDepthStencilState(nullptr, 0);
 	m_context->OMSetBlendState(nullptr, nullptr, BS_MASK);
 
 	// Mirror Stencil
+	m_context->OMSetDepthStencilState(m_dssWrite.get(), 0);
+	m_worldCB->Update(m_context, plate.getWorldMatrix());
+	plate.Render(m_context);
 	m_context->OMSetDepthStencilState(nullptr, 0);
 
 	UpdateCamera(cameraFPS.getViewMatrix());
+
+	m_phongEffect->Begin(m_context);
 }
 
+void Scene::DrawPlate(bool lit)
+{
+	if (lit) {
+		m_context->OMSetBlendState(m_bsAlpha.get(), nullptr, BS_MASK);
+		m_surfaceColorCB->Update(m_context, plate.getColor());
+		m_worldCB->Update(m_context, plate.getWorldMatrix());
+		plate.Render(m_context);
+		m_context->OMSetBlendState(nullptr, nullptr, BS_MASK);
+	}
+	else {
+		m_context->OMSetBlendState(m_bsAlpha.get(), nullptr, BS_MASK);
+		m_surfaceColorCB->Update(m_context, XMFLOAT4(0.0, 0.0, 0.0, 0.5));
+		m_worldCB->Update(m_context, plate.getWorldMatrix());
+		plate.Render(m_context);
+		m_context->OMSetBlendState(nullptr, nullptr, BS_MASK);
+	}
+}
 
 void Scene::Render()
 {
@@ -691,11 +718,37 @@ void Scene::Render()
 	ResetRenderTarget();
 	m_projCB->Update(m_context, m_projMtx);
 	UpdateCamera();
-	
-	DrawMirroredScene();
 
 	m_phongEffect->Begin(m_context);
+
+	SetLight();
+	DrawMirroredScene();
+
+	// Shadows step #1: draw unlit
+	OffLight();
+	DrawPlate(true);
 	DrawScene(false);
+	// Shadows step #2: create stencil buffer
+	//m_context->OMSetBlendState(m_bsNoColorWrite.get(), nullptr, BS_MASK);
+	m_context->ClearDepthStencilView(m_depthStencilView.get(), D3D11_CLEAR_STENCIL, 1.0f, 0);
+	m_context->OMSetRenderTargets(0, nullptr, m_depthStencilView.get());
+	m_context->OMSetDepthStencilState(m_dsShadowWriteFront.get(), 0);
+	DrawShadowGeometry();
+	m_context->RSSetState(m_rsCounterClockwise.get());
+	m_context->OMSetDepthStencilState(m_dsShadowWriteBack.get(), 0);
+	DrawShadowGeometry();
+	m_context->RSSetState(nullptr);
+	// Shadows step #3: draw lit
+	//m_context->OMSetBlendState(nullptr, nullptr, BS_MASK);
+	ID3D11RenderTargetView *backbuffer = m_backBuffer.get();
+	m_context->OMSetRenderTargets(1, &backbuffer, m_depthStencilView.get());
+	SetLight();
+	m_context->OMSetDepthStencilState(m_dsShadowTestComplement.get(), 0);
+	DrawPlate(false);
+	m_context->OMSetDepthStencilState(m_dsShadowTest.get(), 0);
+	DrawScene(false);
+	m_context->OMSetDepthStencilState(nullptr, 0);
+
 	m_phongEffect->End();
 
 	// Draw Partciles
