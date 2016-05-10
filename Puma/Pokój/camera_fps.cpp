@@ -23,6 +23,11 @@ CameraFPS::~CameraFPS()
 {
 }
 
+XMFLOAT3 CameraFPS::getPosition()
+{
+	return position;
+}
+
 void CameraFPS::moveForward(float speedBoost) {
 	position.x += direction.x * movementSpeed * speedBoost;
 	position.y += direction.y * movementSpeed * speedBoost;

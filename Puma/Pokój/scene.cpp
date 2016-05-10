@@ -520,14 +520,20 @@ void Scene::OffLight() const
 }
 
 bool cameraInShadow = false;
+XMFLOAT4 v1, v2, v3;
+XMFLOAT3 pos1, pos2, inter, inter1, inter2, inter3, inter4, inter5, inter6, dot1, dot2, dot3;
+float dotf;
 
 void Scene::UpdateShadowGeometry()
 {
+	vector<VertexPosNormal> vertices;
+	vector<unsigned short> indices;
+	vector<vector<VertexTriangle>> triangles;
+	m_contourEdges = 0;
+	float GO_TO_INFINITY = 1000.0f;
 	for (int partIdx = 0; partIdx < 6; ++partIdx) {
 		XMMATRIX mat = m_meshMtx[partIdx];
-		vector<VertexPosNormal> vertices;
-		vector<unsigned short> indices;
-		m_contourEdges[partIdx] = 0;
+		vector<VertexTriangle> part_triangles;
 		for (int i = 0; i < m_meshEdges[partIdx].size(); ++i) {
 			auto edge = m_meshEdges[partIdx][i];
 			auto v1 = XMVector3Transform(XMLoadFloat3(&m_meshVertexPos[partIdx][edge.vertexIdx1]), mat);
@@ -549,9 +555,8 @@ void Scene::UpdateShadowGeometry()
 			auto t2dot = XMVectorGetX(XMVector3Dot(t2lightDir, t2normal));
 			bool first = t1dot >= 0.0 && t2dot < 0;
 			bool second = t2dot >= 0.0 && t1dot < 0;
-			float GO_TO_INFINITY = 1000.0f;
 			if (first || second) {
-				++m_contourEdges[partIdx];
+				++m_contourEdges;
 				VertexPosNormal vertex1;
 				VertexPosNormal vertex2;
 				VertexPosNormal vertex3;
@@ -576,6 +581,15 @@ void Scene::UpdateShadowGeometry()
 					indices.push_back(idx + 2);
 					indices.push_back(idx + 1);
 					indices.push_back(idx + 3);
+					VertexTriangle tri1, tri2;
+					tri1.v1 = XMLoadFloat3(&vertex1.Pos);
+					tri1.v2 = XMLoadFloat3(&vertex2.Pos);
+					tri1.v3 = XMLoadFloat3(&vertex3.Pos);
+					tri2.v1 = XMLoadFloat3(&vertex3.Pos);
+					tri2.v2 = XMLoadFloat3(&vertex2.Pos);
+					tri2.v3 = XMLoadFloat3(&vertex4.Pos);
+					part_triangles.push_back(tri1);
+					part_triangles.push_back(tri2);
 				}
 				if (second) {
 					indices.push_back(idx + 1);
@@ -584,11 +598,74 @@ void Scene::UpdateShadowGeometry()
 					indices.push_back(idx + 1);
 					indices.push_back(idx + 2);
 					indices.push_back(idx + 3);
+					VertexTriangle tri1, tri2;
+					tri1.v1 = XMLoadFloat3(&vertex2.Pos);
+					tri1.v2 = XMLoadFloat3(&vertex1.Pos);
+					tri1.v3 = XMLoadFloat3(&vertex3.Pos);
+					tri2.v1 = XMLoadFloat3(&vertex2.Pos);
+					tri2.v2 = XMLoadFloat3(&vertex3.Pos);
+					tri2.v3 = XMLoadFloat3(&vertex4.Pos);
+					part_triangles.push_back(tri1);
+					part_triangles.push_back(tri2);
 				}
 			}
 		}
-		m_vbShadow[partIdx] = m_device.CreateVertexBuffer(vertices);
-		m_ibShadow[partIdx] = m_device.CreateIndexBuffer(indices);
+		triangles.push_back(part_triangles);
+	}
+	m_vbShadowVolume = m_device.CreateVertexBuffer(vertices);
+	m_ibShadowVolume = m_device.CreateIndexBuffer(indices);
+
+	auto pl = XMPlaneFromPoints(XMLoadFloat3(&XMFLOAT3(0, 2, 0)), XMLoadFloat3(&XMFLOAT3(0, 2, 1)), XMLoadFloat3(&XMFLOAT3(1, 2, 0)));
+	dotf = XMVectorGetX(XMPlaneDotCoord(pl, XMLoadFloat3(&XMFLOAT3(0, 3, 0))));
+
+	cameraInShadow = false;
+	int plus = 0;
+	int zero = 0;
+	int minus = 0;
+	XMVECTOR pos = XMLoadFloat3(&cameraFPS.getPosition());
+	/*
+	XMVECTOR pos_inf = pos + XMLoadFloat3(&XMFLOAT3(GO_TO_INFINITY, 0, 0));
+	XMStoreFloat3(&pos1, pos);
+	XMStoreFloat3(&pos2, pos_inf);*/
+	for (int part = 0; part < triangles.size(); ++part) {
+		bool cameraInPartShadow = true;
+		for (int i = 0; i < triangles[part].size(); ++i) {
+			VertexTriangle tri = triangles[part][i];
+			XMStoreFloat4(&v1, tri.v1);
+			XMStoreFloat4(&v2, tri.v2);
+			XMStoreFloat4(&v3, tri.v3);
+			auto plane = XMPlaneFromPoints(tri.v1, tri.v2, tri.v3);
+			//auto plane = XMPlaneFromPointNormal(tri.v1, tri.v2, tri.v3);
+			dotf = XMVectorGetX(XMPlaneDotCoord(plane, pos));
+			if (dotf > 0) {
+				cameraInPartShadow = false;
+				//break;
+			}
+			/*
+			auto inside1 = XMVectorGetX(XMVector3Dot(tri.v2 - tri.v1, intersect - tri.v1));
+			auto inside2 = XMVectorGetX(XMVector3Dot(tri.v3 - tri.v2, intersect - tri.v2));
+			auto inside3 = XMVectorGetX(XMVector3Dot(tri.v1 - tri.v3, intersect - tri.v3));
+			XMStoreFloat3(&inter, intersect);
+			XMStoreFloat3(&inter1, tri.v2 - tri.v1);
+			XMStoreFloat3(&inter2, intersect - tri.v1);
+			XMStoreFloat3(&inter3, tri.v3 - tri.v2);
+			XMStoreFloat3(&inter4, intersect - tri.v2);
+			XMStoreFloat3(&inter5, tri.v1 - tri.v3);
+			XMStoreFloat3(&inter6, intersect - tri.v3);
+			XMStoreFloat3(&dot1, XMVector3Dot(tri.v2 - tri.v1, intersect - tri.v1));
+			XMStoreFloat3(&dot2, XMVector3Dot(tri.v3 - tri.v2, intersect - tri.v2));
+			XMStoreFloat3(&dot3, XMVector3Dot(tri.v1 - tri.v3, intersect - tri.v3));*/
+			/*if (inside1 >= 0 && inside2 >= 0 && inside3 >= 0) {
+				++plus;
+			}
+			else {
+				++minus;
+			}*/
+		}
+		if (cameraInPartShadow) {
+			cameraInShadow = true;
+			break;
+		}
 	}
 }
 
@@ -597,12 +674,10 @@ void Scene::DrawShadowGeometry()
 	//m_surfaceColorCB->Update(m_context, XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f));
 
 	m_worldCB->Update(m_context, XMMatrixIdentity());
-	for (int i = 0; i < 6; ++i) {
-		auto b = m_vbShadow[i].get();
-		m_context->IASetVertexBuffers(0, 1, &b, &VB_STRIDE, &VB_OFFSET);
-		m_context->IASetIndexBuffer(m_ibShadow[i].get(), DXGI_FORMAT_R16_UINT, 0);
-		m_context->DrawIndexed(m_contourEdges[i] * 6, 0, 0);
-	}
+	auto b = m_vbShadowVolume.get();
+	m_context->IASetVertexBuffers(0, 1, &b, &VB_STRIDE, &VB_OFFSET);
+	m_context->IASetIndexBuffer(m_ibShadowVolume.get(), DXGI_FORMAT_R16_UINT, 0);
+	m_context->DrawIndexed(m_contourEdges * 6, 0, 0);
 }
 
 void Scene::DrawScene(bool mirrored)
@@ -652,10 +727,12 @@ void Scene::DrawRoom()
 
 void Scene::DrawMirroredScene()
 {
-	m_context->OMSetDepthStencilState(m_dssWrite.get(), -1); 
+	m_phongEffect->Begin(m_context);
+
+	m_context->OMSetDepthStencilState(m_dssWrite.get(), 1); 
 	m_worldCB->Update(m_context, plate.getWorldMatrix());
 	plate.Render(m_context);
-	m_context->OMSetDepthStencilState(m_dssTest.get(), -1); // NEW
+	m_context->OMSetDepthStencilState(m_dssTest.get(), 1); // NEW
 
 	//Setup render state and view matrix for rendering the mirrored world
 	DirectX::XMMATRIX ViewMirror = m_mirrorMtx * cameraFPS.getViewMatrix();
@@ -676,15 +753,8 @@ void Scene::DrawMirroredScene()
 	m_context->OMSetDepthStencilState(nullptr, 0);
 	m_context->OMSetBlendState(nullptr, nullptr, BS_MASK);
 
-	// Mirror Stencil
-	m_context->OMSetDepthStencilState(m_dssWrite.get(), 0);
-	m_worldCB->Update(m_context, plate.getWorldMatrix());
-	plate.Render(m_context);
-	m_context->OMSetDepthStencilState(nullptr, 0);
 
 	UpdateCamera(cameraFPS.getViewMatrix());
-
-	m_phongEffect->Begin(m_context);
 }
 
 void Scene::DrawPlate(bool lit)
@@ -719,10 +789,10 @@ void Scene::Render()
 	m_projCB->Update(m_context, m_projMtx);
 	UpdateCamera();
 
-	m_phongEffect->Begin(m_context);
-
 	SetLight();
 	DrawMirroredScene();
+
+	m_phongEffect->Begin(m_context);
 
 	// Shadows step #1: draw unlit
 	OffLight();
@@ -730,7 +800,7 @@ void Scene::Render()
 	DrawScene(false);
 	// Shadows step #2: create stencil buffer
 	//m_context->OMSetBlendState(m_bsNoColorWrite.get(), nullptr, BS_MASK);
-	m_context->ClearDepthStencilView(m_depthStencilView.get(), D3D11_CLEAR_STENCIL, 1.0f, 0);
+	m_context->ClearDepthStencilView(m_depthStencilView.get(), D3D11_CLEAR_STENCIL, 1.0f, cameraInShadow ? 1 : 0);
 	m_context->OMSetRenderTargets(0, nullptr, m_depthStencilView.get());
 	m_context->OMSetDepthStencilState(m_dsShadowWriteFront.get(), 0);
 	DrawShadowGeometry();

@@ -27,6 +27,12 @@ struct Triangle {
 	int vertexIdx3;
 };
 
+struct VertexTriangle {
+	DirectX::XMVECTOR v1;
+	DirectX::XMVECTOR v2;
+	DirectX::XMVECTOR v3;
+};
+
 struct VertexPosNormal
 {
 	DirectX::XMFLOAT3 Pos;
@@ -105,11 +111,11 @@ private:
 	std::vector<Triangle> m_meshTriangles[6];
 	std::vector<Edge> m_meshEdges[6];
 	DirectX::XMMATRIX m_meshMtx[6];
-	int m_contourEdges[6];
+	int m_contourEdges;
 	std::shared_ptr<ID3D11Buffer> m_vbMesh[6];
 	std::shared_ptr<ID3D11Buffer> m_ibMesh[6];
-	std::shared_ptr<ID3D11Buffer> m_vbShadow[6];
-	std::shared_ptr<ID3D11Buffer> m_ibShadow[6];
+	std::shared_ptr<ID3D11Buffer> m_vbShadowVolume;
+	std::shared_ptr<ID3D11Buffer> m_ibShadowVolume;
 
 	void LoadMeshPart(std::string filename, int partIdx);
 	void InitializeMesh();

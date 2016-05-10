@@ -37,6 +37,8 @@ public:
 
 	void rotate(float dx, float dy);
 
+	DirectX::XMFLOAT3 getPosition();
+
 	void setSensitivity(float);
 	float getSensitivity();
 
