@@ -2,6 +2,7 @@
 #include <vector>
 #include <algorithm>
 #include "gk2_exceptions.h"
+#include <iostream>
 
 using namespace std;
 using namespace gk2;
@@ -30,8 +31,8 @@ bool ParticleComparer::operator()(const ParticleVertex& p1, const ParticleVertex
 }
 
 const XMFLOAT3 ParticleSystem::EMITTER_DIR = XMFLOAT3(0.0f, 1.0f, 0.0f);
-const float ParticleSystem::TIME_TO_LIVE = 0.8f;
-const float ParticleSystem::EMISSION_RATE = 30.0f;
+const float ParticleSystem::TIME_TO_LIVE = 2.0f;
+const float ParticleSystem::EMISSION_RATE = 45.0f;
 const float ParticleSystem::MAX_ANGLE = XM_PIDIV2 / 9.0f;
 const float ParticleSystem::MIN_VELOCITY = 0.2f;
 const float ParticleSystem::MAX_VELOCITY = 0.33f;
@@ -82,7 +83,7 @@ void ParticleSystem::SetProjMtxBuffer(const shared_ptr<CBMatrix>& proj)
 
 XMFLOAT3 ParticleSystem::RandomVelocity()
 {
-	float lenBoost = 5.0f;
+	float lenBoost = 6.0f;
 	float x, y, z;
 	do
 	{
@@ -140,8 +141,9 @@ XMFLOAT4 operator -(const XMFLOAT4& v1, const XMFLOAT4& v2)
 
 void ParticleSystem::UpdateParticle(Particle& p, float dt)
 {
-	//const float GRAVITY_CONST = -9.81f;
+	//if(dt == 0) dt += 0.001;
 	const float GRAVITY_CONST = 9.81f;
+
 	XMFLOAT3 down(0, -1, 0);
 	float mass = 0.5f;
 
@@ -155,16 +157,21 @@ void ParticleSystem::UpdateParticle(Particle& p, float dt)
 	p.Velocities.Velocity.y += acceleration.y * dt;
 	p.Velocities.Velocity.z += acceleration.z * dt;
 
-	//p.Velocities.Velocity.x += GRAVITY_CONST * dt;
-	//p.Velocities.Velocity.y += GRAVITY_CONST * dt;
-	//p.Velocities.Velocity.z += GRAVITY_CONST * dt;
 
 	p.Vertex.Age += dt;
 	p.Vertex.PreviousPos = p.Vertex.Pos;
-	p.Vertex.Pos = p.Vertex.Pos + p.Velocities.Velocity * dt;
+	p.Vertex.Pos = p.Vertex.Pos + p.Velocities.Velocity * (dt);
+
+
 
 	p.Vertex.Size += PARTICLE_SCALE * PARTICLE_SIZE * dt;
 	p.Vertex.Angle += p.Velocities.AngleVelocity * dt;
+
+	/*
+	if(p.Vertex.Pos.x == p.Vertex.PreviousPos.x && p.Vertex.Pos.y == p.Vertex.PreviousPos.y && p.Vertex.Pos.z == p.Vertex.PreviousPos.z)
+		std::cout << "Pos:         " << p.Vertex.Pos.x << ", " << p.Vertex.Pos.y << ", " << p.Vertex.Pos.z << std::endl;
+	std::cout << "PreviousPos: " << p.Vertex.PreviousPos.x << ", " << p.Vertex.PreviousPos.y << ", " << p.Vertex.PreviousPos.z << std::endl;
+	std::cout << std::endl;*/
 }
 
 void ParticleSystem::UpdateVertexBuffer(shared_ptr<ID3D11DeviceContext>& context, XMFLOAT4 cameraPos)

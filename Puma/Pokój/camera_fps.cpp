@@ -15,7 +15,7 @@ CameraFPS::CameraFPS()
 	m_pitch = 0;
 	m_yaw = 0;
 
-	sensitivity = 0.00001;
+	sensitivity = 0.00005;
 	movementSpeed = 0.1;
 }
 
